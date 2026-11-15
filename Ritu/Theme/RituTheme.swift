@@ -53,6 +53,6 @@ extension View {
 @available(iOS 26.0, *)
 enum RituShape {
     static func panel(_ minimumRadius: CGFloat) -> ConcentricRectangle {
-        ConcentricRectangle(corners: .concentric(minimum: minimumRadius), isUniform: false)
+        ConcentricRectangle(corners: .concentric(minimum: .fixed(minimumRadius)), isUniform: false)
     }
 }

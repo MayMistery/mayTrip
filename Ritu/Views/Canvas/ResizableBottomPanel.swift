@@ -37,7 +37,7 @@ struct ResizableBottomPanel<Content: View>: View {
                 Color.clear
                     .frame(height: 32)
                     .contentShape(Rectangle())
-                    .gesture(drag)
+                    .gesture(drag())
                     .accessibilityHidden(true)
             }
     }
