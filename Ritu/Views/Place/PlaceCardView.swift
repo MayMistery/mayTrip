@@ -15,28 +15,20 @@ struct PlaceCardView: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        TextField(String(localized: "place.name"), text: $place.name)
-                            .font(RituTheme.titleFont)
-                        TextField(String(localized: "place.nameSecondary"), text: $place.nameSecondary)
-                            .font(.title3)
-                            .foregroundStyle(.secondary)
-                    }
-                    if !place.copyableAddress.isEmpty {
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text(String(localized: "place.address"))
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                            Text(place.copyableAddress)
-                                .font(.body)
-                            Button(String(localized: "place.copyAddress")) {
-                                UIPasteboard.general.string = place.copyableAddress
-                            }
-                            .font(.footnote.weight(.medium))
+            Form {
+                Section {
+                    TextField(String(localized: "place.name"), text: $place.name)
+                    TextField(String(localized: "place.nameSecondary"), text: $place.nameSecondary)
+                }
+                if !place.copyableAddress.isEmpty {
+                    Section {
+                        Text(place.copyableAddress)
+                        Button(String(localized: "place.copyAddress")) {
+                            UIPasteboard.general.string = place.copyableAddress
                         }
                     }
+                }
+                Section {
                     TextField(String(localized: "place.address"), text: $place.address, axis: .vertical)
                         .lineLimit(2...4)
                     TextField(String(localized: "place.hours"), text: $place.hoursText)
@@ -44,9 +36,10 @@ struct PlaceCardView: View {
                     TextField(String(localized: "place.bookingRef"), text: $place.bookingRef)
                     TextField(String(localized: "place.note"), text: $place.note, axis: .vertical)
                         .lineLimit(3...8)
-
-                    daySection
-                    if place.coordinate.isValidCoordinate {
+                }
+                daySection
+                if place.coordinate.isValidCoordinate {
+                    Section {
                         HandoffButtons(
                             origin: nil,
                             destination: place.coordinate,
@@ -55,7 +48,6 @@ struct PlaceCardView: View {
                         )
                     }
                 }
-                .padding(24)
             }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -89,20 +81,18 @@ struct PlaceCardView: View {
 
     @ViewBuilder
     private var daySection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(String(localized: "place.putOnDay"))
-                .font(.caption)
-                .foregroundStyle(.secondary)
+        Section {
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
+                HStack(spacing: 6) {
                     Button {
                         removeFromDays()
                     } label: {
                         Text(String(localized: "layer.unscheduled"))
+                            .font(.subheadline.weight(.semibold))
                             .padding(.horizontal, 12)
                             .padding(.vertical, 8)
-                            .background(isUnscheduled ? Color.primary : Color.primary.opacity(0.06), in: Capsule())
-                            .foregroundStyle(isUnscheduled ? Color(.systemBackground) : .primary)
+                            .background(isUnscheduled ? Color.primary : Color(.secondarySystemFill), in: Capsule())
+                            .foregroundStyle(isUnscheduled ? Color(.systemBackground) : Color.primary)
                     }
                     .buttonStyle(.plain)
                     ForEach(0..<trip.dayCount, id: \.self) { offset in
@@ -115,13 +105,16 @@ struct PlaceCardView: View {
                                 .font(.subheadline.weight(.semibold).monospacedDigit())
                                 .padding(.horizontal, 12)
                                 .padding(.vertical, 8)
-                                .background(selected ? DayPalette.color(forDayOffset: offset) : Color.primary.opacity(0.06), in: Capsule())
-                                .foregroundStyle(selected ? .white : .primary)
+                                .background(selected ? DayPalette.color(forDayOffset: offset) : Color(.secondarySystemFill), in: Capsule())
+                                .foregroundStyle(selected ? Color.white : Color.primary)
                         }
                         .buttonStyle(.plain)
                     }
                 }
+                .padding(.vertical, 4)
             }
+        } header: {
+            Text(String(localized: "place.putOnDay"))
         }
     }
 

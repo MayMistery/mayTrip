@@ -1,73 +1,77 @@
-
 import SwiftUI
 
 enum PanelDetent: Equatable {
     case compact
     case medium
     case large
+
+    static func height(_ detent: PanelDetent, in total: CGFloat) -> CGFloat {
+        switch detent {
+        case .compact:
+            return 156
+        case .medium:
+            return min(max(total * 0.46, 280), total * 0.62)
+        case .large:
+            return min(max(total - 72, 360), total * 0.88)
+        }
+    }
 }
 
 struct ResizableBottomPanel<Content: View>: View {
     @Binding var detent: PanelDetent
-    var compactHeight: CGFloat = 156
-    @ViewBuilder var content: (PanelDetent) -> Content
+    var containerHeight: CGFloat
+    @ViewBuilder var content: () -> Content
 
     @State private var dragOffset: CGFloat = 0
 
     var body: some View {
-        GeometryReader { geometry in
-            let medium = max(geometry.size.height * 0.38, 240)
-            let large = max(geometry.size.height - 56, 360)
-            let height = currentHeight(medium: medium, large: large) - dragOffset
-
-            VStack(spacing: 0) {
-                Spacer(minLength: 0)
-                content(detent)
-                    .frame(height: max(compactHeight, height), alignment: .top)
-                    .background(.regularMaterial)
-                    .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
-                    .shadow(color: .black.opacity(0.12), radius: 18, y: -4)
+        let height = max(132, PanelDetent.height(detent, in: containerHeight) - dragOffset)
+        content()
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .frame(height: height)
+            .background {
+                panelFill
                     .ignoresSafeArea(edges: .bottom)
-                    .overlay(alignment: .top) {
-                        Color.clear
-                            .frame(height: 32)
-                            .contentShape(Rectangle())
-                            .gesture(drag(medium: medium, large: large))
-                            .accessibilityHidden(true)
-                    }
             }
-        }
-        .ignoresSafeArea(edges: .bottom)
+            .overlay(alignment: .top) {
+                Color.clear
+                    .frame(height: 32)
+                    .contentShape(Rectangle())
+                    .gesture(drag)
+                    .accessibilityHidden(true)
+            }
     }
 
-    private func currentHeight(medium: CGFloat, large: CGFloat) -> CGFloat {
-        switch detent {
-        case .compact: compactHeight
-        case .medium: medium
-        case .large: large
+    @ViewBuilder
+    private var panelFill: some View {
+        if #available(iOS 26.0, *) {
+            Color.clear
+                .glassEffect(.regular, in: RituShape.panel(RituTheme.sheetCorner))
+        } else {
+            RoundedRectangle(cornerRadius: RituTheme.sheetCorner, style: .continuous)
+                .fill(.regularMaterial)
         }
     }
 
-    private func drag(medium: CGFloat, large: CGFloat) -> some Gesture {
+    private func drag() -> some Gesture {
         DragGesture(minimumDistance: 8, coordinateSpace: .global)
             .onChanged { value in
                 dragOffset = value.translation.height
             }
             .onEnded { value in
-                let predicted = currentHeight(medium: medium, large: large) - value.predictedEndTranslation.height
-                withAnimation(.interactiveSpring(response: 0.32, dampingFraction: 0.86)) {
-                    detent = nearest(to: predicted, medium: medium, large: large)
+                let resting = PanelDetent.height(detent, in: containerHeight)
+                let predicted = resting - value.predictedEndTranslation.height
+                withAnimation(.smooth(duration: 0.28)) {
+                    detent = nearest(to: predicted)
                     dragOffset = 0
                 }
             }
     }
 
-    private func nearest(to height: CGFloat, medium: CGFloat, large: CGFloat) -> PanelDetent {
-        let candidates: [(PanelDetent, CGFloat)] = [
-            (.compact, compactHeight),
-            (.medium, medium),
-            (.large, large)
-        ]
-        return candidates.min(by: { abs($0.1 - height) < abs($1.1 - height) })?.0 ?? .medium
+    private func nearest(to height: CGFloat) -> PanelDetent {
+        let candidates: [PanelDetent] = [.compact, .medium, .large]
+        return candidates.min { lhs, rhs in
+            abs(PanelDetent.height(lhs, in: containerHeight) - height) < abs(PanelDetent.height(rhs, in: containerHeight) - height)
+        } ?? .medium
     }
 }

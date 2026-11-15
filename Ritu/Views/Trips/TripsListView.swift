@@ -1,73 +1,71 @@
-
 import SwiftUI
 import SwiftData
 
 struct TripsListView: View {
+    @Binding var selection: UUID?
+
     @Environment(\.modelContext) private var context
     @Query(sort: \Trip.startDate, order: .forward) private var trips: [Trip]
     @State private var isCreating = false
     @State private var tripPendingDelete: Trip?
 
     var body: some View {
-        NavigationStack {
-            Group {
-                if trips.isEmpty {
-                    emptyState
-                } else {
-                    list
+        Group {
+            if trips.isEmpty {
+                emptyState
+            } else {
+                list
+            }
+        }
+        .background(Color(.systemGroupedBackground))
+        .navigationTitle(String(localized: "trips.title"))
+        .navigationBarTitleDisplayMode(.large)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    isCreating = true
+                } label: {
+                    Label(String(localized: "trip.new"), systemImage: "plus")
                 }
             }
-            .background(Color(.systemBackground))
-            .navigationTitle(String(localized: "trips.title"))
-            .navigationBarTitleDisplayMode(.large)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        isCreating = true
-                    } label: {
-                        Image(systemName: "plus")
-                            .fontWeight(.semibold)
-                            .accessibilityLabel(String(localized: "trip.new"))
+        }
+        .sheet(isPresented: $isCreating) {
+            CreateTripView()
+        }
+        .confirmationDialog(
+            String(localized: "trip.delete.title"),
+            isPresented: Binding(
+                get: { tripPendingDelete != nil },
+                set: { if !$0 { tripPendingDelete = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button(String(localized: "trip.delete.confirm"), role: .destructive) {
+                if let tripPendingDelete {
+                    if selection == tripPendingDelete.id {
+                        selection = nil
                     }
+                    context.delete(tripPendingDelete)
+                    try? context.save()
                 }
+                tripPendingDelete = nil
             }
-            .sheet(isPresented: $isCreating) {
-                CreateTripView()
+            Button(String(localized: "action.cancel"), role: .cancel) {
+                tripPendingDelete = nil
             }
-            .confirmationDialog(
-                String(localized: "trip.delete.title"),
-                isPresented: Binding(
-                    get: { tripPendingDelete != nil },
-                    set: { if !$0 { tripPendingDelete = nil } }
-                ),
-                titleVisibility: .visible
-            ) {
-                Button(String(localized: "trip.delete.confirm"), role: .destructive) {
-                    if let tripPendingDelete {
-                        context.delete(tripPendingDelete)
-                        try? context.save()
-                    }
-                    tripPendingDelete = nil
-                }
-                Button(String(localized: "action.cancel"), role: .cancel) {
-                    tripPendingDelete = nil
-                }
-            } message: {
-                Text(String(localized: "trip.delete.message"))
-            }
+        } message: {
+            Text(String(localized: "trip.delete.message"))
         }
     }
 
     private var list: some View {
-        ScrollView {
-            LazyVStack(spacing: 16) {
-                ForEach(trips, id: \.id) { trip in
-                    NavigationLink {
-                        TripCanvasView(trip: trip)
-                    } label: {
-                        TripCardView(trip: trip)
-                    }
-                    .buttonStyle(.plain)
+        List(selection: $selection) {
+            ForEach(trips, id: \.id) { trip in
+                TripCardView(trip: trip)
+                    .tag(trip.id)
+                    .listRowSeparator(.hidden)
+                    .listRowInsets(EdgeInsets(top: 7, leading: 16, bottom: 7, trailing: 16))
+                    .listRowBackground(Color.clear)
                     .contextMenu {
                         Button(role: .destructive) {
                             tripPendingDelete = trip
@@ -75,48 +73,38 @@ struct TripsListView: View {
                             Label(String(localized: "trip.delete"), systemImage: "trash")
                         }
                     }
-                }
             }
-            .padding(.horizontal, 20)
-            .padding(.bottom, 32)
-            .padding(.top, 8)
         }
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+        .contentMargins(.top, 8, for: .scrollContent)
+        .contentMargins(.bottom, 24, for: .scrollContent)
     }
 
     private var emptyState: some View {
-        VStack(spacing: 20) {
-            Spacer()
-            Text(String(localized: "trips.empty.title"))
-                .font(RituTheme.titleFont)
-                .multilineTextAlignment(.center)
-            Text(String(localized: "trips.empty.body"))
-                .font(.body)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 32)
-            Button(String(localized: "trip.new")) {
-                isCreating = true
-            }
-            .buttonStyle(.borderedProminent)
-            .padding(.top, 8)
-            Button(String(localized: "trips.sample.load")) {
-                _ = SampleTripFactory.makeSpainPortugal(in: context)
-                try? context.save()
-            }
-            .font(.body)
-            .padding(.top, 4)
-            Text(String(localized: "trips.sample.caption"))
-                .font(.footnote)
-                .foregroundStyle(.tertiary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 32)
-            Spacer()
-        }
+        QuietEmptyState(
+            systemImage: "map",
+            title: String(localized: "trips.empty.title"),
+            message: String(localized: "trips.empty.body"),
+            primaryTitle: String(localized: "trip.new"),
+            primaryAction: { isCreating = true },
+            secondaryTitle: String(localized: "trips.sample.load"),
+            secondaryAction: loadSample,
+            footnote: String(localized: "trips.sample.caption")
+        )
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func loadSample() {
+        _ = SampleTripFactory.makeSpainPortugal(in: context)
+        try? context.save()
     }
 }
 
 #Preview {
-    TripsListView()
-        .modelContainer(RituApp.previewContainer(withSample: false))
+    @Previewable @State var selection: UUID?
+    NavigationStack {
+        TripsListView(selection: $selection)
+    }
+    .modelContainer(RituApp.previewContainer(withSample: false))
 }

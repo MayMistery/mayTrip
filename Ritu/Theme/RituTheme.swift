@@ -23,7 +23,36 @@ enum RituTheme {
         .system(.headline, design: .default, weight: .semibold).monospacedDigit()
     }
 
-    static var sheetCorner: CGFloat { 20 }
-    static var pinSize: CGFloat { 28 }
-    static var crowdedPinSize: CGFloat { 24 }
+    static var sheetCorner: CGFloat { 28 }
+    static var cardCorner: CGFloat { 22 }
+    static var pinSize: CGFloat { 30 }
+    static var crowdedPinSize: CGFloat { 22 }
+}
+
+extension View {
+    /// Corners follow the screen when they sit near it, and keep a quiet radius elsewhere.
+    @ViewBuilder
+    func rituClip(cornerRadius: CGFloat = RituTheme.cardCorner) -> some View {
+        if #available(iOS 26.0, *) {
+            clipShape(RituShape.panel(cornerRadius))
+        } else {
+            clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+        }
+    }
+
+    @ViewBuilder
+    func rituGlass(cornerRadius: CGFloat = RituTheme.sheetCorner) -> some View {
+        if #available(iOS 26.0, *) {
+            glassEffect(.regular, in: RituShape.panel(cornerRadius))
+        } else {
+            background(.regularMaterial, in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+        }
+    }
+}
+
+@available(iOS 26.0, *)
+enum RituShape {
+    static func panel(_ minimumRadius: CGFloat) -> ConcentricRectangle {
+        ConcentricRectangle(corners: .concentric(minimum: minimumRadius), isUniform: false)
+    }
 }

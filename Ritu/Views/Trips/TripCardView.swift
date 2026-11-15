@@ -1,4 +1,3 @@
-
 import SwiftUI
 import UIKit
 
@@ -6,32 +5,32 @@ struct TripCardView: View {
     var trip: Trip
 
     var body: some View {
-        ZStack(alignment: .bottomLeading) {
+        VStack(alignment: .leading, spacing: 0) {
             cover
-            LinearGradient(
-                colors: [.clear, .black.opacity(0.58)],
-                startPoint: .center,
-                endPoint: .bottom
-            )
+                .frame(height: 112)
+                .frame(maxWidth: .infinity)
+                .clipped()
             VStack(alignment: .leading, spacing: 4) {
                 Text(trip.name)
-                    .font(RituTheme.titleFont)
-                    .foregroundStyle(.white)
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(.primary)
                     .lineLimit(2)
                 Text(rangeText)
                     .font(.subheadline.weight(.medium).monospacedDigit())
-                    .foregroundStyle(.white.opacity(0.88))
+                    .foregroundStyle(.secondary)
                 if !trip.citiesText.isEmpty {
                     Text(trip.citiesText)
                         .font(.subheadline)
-                        .foregroundStyle(.white.opacity(0.8))
+                        .foregroundStyle(.tertiary)
                         .lineLimit(1)
                 }
             }
-            .padding(20)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 14)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .frame(minHeight: 220)
-        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .background(Color(.secondarySystemGroupedBackground))
+        .rituClip()
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityLabel)
     }
@@ -42,7 +41,6 @@ struct TripCardView: View {
             image
                 .resizable()
                 .scaledToFill()
-                .frame(maxWidth: .infinity, minHeight: 220, maxHeight: 280)
         } else {
             defaultCover
         }
@@ -51,21 +49,24 @@ struct TripCardView: View {
     private var defaultCover: some View {
         let color = DayPalette.color(forDayOffset: trip.name.hashValue)
         return ZStack {
-            color.opacity(0.85)
+            LinearGradient(
+                colors: [color.opacity(0.28), color.opacity(0.10)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
             GeometryReader { proxy in
                 Path { path in
-                    let w = proxy.size.width
-                    let h = proxy.size.height
-                    path.move(to: CGPoint(x: w * 0.08, y: h * 0.72))
+                    let width = proxy.size.width
+                    let height = proxy.size.height
+                    path.move(to: CGPoint(x: width * 0.10, y: height * 0.72))
                     path.addQuadCurve(
-                        to: CGPoint(x: w * 0.92, y: h * 0.38),
-                        control: CGPoint(x: w * 0.48, y: h * 0.18)
+                        to: CGPoint(x: width * 0.90, y: height * 0.36),
+                        control: CGPoint(x: width * 0.46, y: height * 0.22)
                     )
                 }
-                .stroke(.white.opacity(0.35), style: StrokeStyle(lineWidth: 3, lineCap: .round))
+                .stroke(color.opacity(0.70), style: StrokeStyle(lineWidth: 1.5, lineCap: .round))
             }
         }
-        .frame(maxWidth: .infinity, minHeight: 220, maxHeight: 280)
     }
 
     private var rangeText: String {
@@ -85,4 +86,3 @@ struct TripCardView: View {
         return nil
     }
 }
-

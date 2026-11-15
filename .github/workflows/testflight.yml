@@ -13,7 +13,7 @@ on:
 jobs:
   build-and-upload:
     name: Build and upload to TestFlight
-    runs-on: macos-15
+    runs-on: xcode-27
     timeout-minutes: 60
     env:
       ASC_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
@@ -24,28 +24,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Select Xcode 26 or later
-        run: |
-          set -euo pipefail
-          echo "Installed Xcode apps:"
-          ls -d /Applications/Xcode*.app || true
-          chosen=""
-          # Prefer a 26.x toolchain; App Store uploads in 2026 need the iOS 26 SDK.
-          for app in /Applications/Xcode_26*.app /Applications/Xcode-26*.app; do
-            if [ -d "$app" ]; then
-              chosen="$app"
-            fi
-          done
-          if [ -z "$chosen" ]; then
-            chosen="$(ls -d /Applications/Xcode*.app 2>/dev/null | sort -V | tail -n 1 || true)"
-          fi
-          if [ -z "$chosen" ]; then
-            echo "No Xcode.app found on the runner." >&2
-            exit 1
-          fi
-          echo "Using $chosen"
-          sudo xcode-select -s "$chosen"
-          xcodebuild -version
+      - name: Select Xcode with the iOS 27.1 SDK
+        run: python3 ci/select_xcode.py
 
       - name: Write App Store Connect API key
         env:

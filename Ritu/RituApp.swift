@@ -6,7 +6,7 @@ import SwiftData
 struct RituApp: App {
     var body: some Scene {
         WindowGroup {
-            TripsListView()
+            TripsRootView()
                 .tint(RituTheme.ink)
         }
         .modelContainer(Self.container)

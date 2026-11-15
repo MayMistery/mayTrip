@@ -32,10 +32,36 @@ struct TripMapView: View {
             .simultaneousGesture(longPress(proxy: proxy))
         }
         .onChange(of: selectedOffset) { _, _ in
-            fitSelectedDay()
+            fitIfNeeded(force: true)
+        }
+        .onChange(of: showUnscheduled) { _, _ in
+            fitIfNeeded(force: true)
         }
         .onAppear {
-            fitSelectedDay()
+            fitIfNeeded(force: false)
+        }
+    }
+
+    @MapContentBuilder
+    private func leg(_ path: [CLLocationCoordinate2D], color: Color, emphasized: Bool, transfer: Bool) -> some MapContent {
+        if path.count >= 2 {
+            if emphasized {
+                MapPolyline(coordinates: path)
+                    .stroke(
+                        Color.white.opacity(0.92),
+                        style: StrokeStyle(lineWidth: transfer ? 5.5 : 7.5, lineCap: .round, lineJoin: .round)
+                    )
+            }
+            MapPolyline(coordinates: path)
+                .stroke(
+                    emphasized ? color : color.opacity(0.30),
+                    style: StrokeStyle(
+                        lineWidth: emphasized ? (transfer ? 2.5 : 4) : 2,
+                        lineCap: .round,
+                        lineJoin: .round,
+                        dash: transfer ? [7, 6] : []
+                    )
+                )
         }
     }
 
@@ -48,11 +74,12 @@ struct TripMapView: View {
 
         ForEach(Array(stops.enumerated()), id: \.element.id) { index, stop in
             if let next = stops[safe: index + 1] {
-                let path = path(from: stop, to: next)
-                if path.count >= 2 {
-                    MapPolyline(coordinates: path)
-                        .stroke(color, style: StrokeStyle(lineWidth: TravelTimeService.isTransferHop(from: stop, to: next) ? 2.0 : 3.0, lineCap: .round, lineJoin: .round, dash: TravelTimeService.isTransferHop(from: stop, to: next) ? [6, 7] : []))
-                }
+                leg(
+                    path(from: stop, to: next),
+                    color: color,
+                    emphasized: true,
+                    transfer: TravelTimeService.isTransferHop(from: stop, to: next)
+                )
             }
         }
 
@@ -85,11 +112,12 @@ struct TripMapView: View {
             let stops = plan.orderedStops
             ForEach(Array(stops.enumerated()), id: \.element.id) { index, stop in
                 if let next = stops[safe: index + 1] {
-                    let path = path(from: stop, to: next)
-                    if path.count >= 2 {
-                        MapPolyline(coordinates: path)
-                            .stroke(color.opacity(0.28), style: StrokeStyle(lineWidth: 1.5, lineCap: .round, lineJoin: .round))
-                    }
+                    leg(
+                        path(from: stop, to: next),
+                        color: color,
+                        emphasized: false,
+                        transfer: false
+                    )
                 }
             }
             ForEach(stops, id: \.id) { stop in
@@ -147,6 +175,13 @@ struct TripMapView: View {
                     onLongPress(coordinate)
                 }
             }
+    }
+
+    private func fitIfNeeded(force: Bool) {
+        if !force {
+            guard case .automatic = position else { return }
+        }
+        fitSelectedDay()
     }
 
     private func fitSelectedDay() {
