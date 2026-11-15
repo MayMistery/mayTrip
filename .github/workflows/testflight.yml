@@ -1,0 +1,104 @@
+name: TestFlight
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "Ritu/**"
+      - "Ritu.xcodeproj/**"
+      - ".github/workflows/testflight.yml"
+      - "ci/**"
+
+jobs:
+  build-and-upload:
+    name: Build and upload to TestFlight
+    runs-on: macos-15
+    timeout-minutes: 60
+    env:
+      ASC_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+      ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+      IOS_TEAM_ID: ${{ secrets.IOS_TEAM_ID }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select Xcode 26 or later
+        run: |
+          set -euo pipefail
+          echo "Installed Xcode apps:"
+          ls -d /Applications/Xcode*.app || true
+          chosen=""
+          # Prefer a 26.x toolchain; App Store uploads in 2026 need the iOS 26 SDK.
+          for app in /Applications/Xcode_26*.app /Applications/Xcode-26*.app; do
+            if [ -d "$app" ]; then
+              chosen="$app"
+            fi
+          done
+          if [ -z "$chosen" ]; then
+            chosen="$(ls -d /Applications/Xcode*.app 2>/dev/null | sort -V | tail -n 1 || true)"
+          fi
+          if [ -z "$chosen" ]; then
+            echo "No Xcode.app found on the runner." >&2
+            exit 1
+          fi
+          echo "Using $chosen"
+          sudo xcode-select -s "$chosen"
+          xcodebuild -version
+
+      - name: Write App Store Connect API key
+        env:
+          APP_STORE_CONNECT_API_KEY: ${{ secrets.APP_STORE_CONNECT_API_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${APP_STORE_CONNECT_API_KEY:-}" ] || [ -z "${ASC_KEY_ID:-}" ] || [ -z "${ASC_ISSUER_ID:-}" ] || [ -z "${IOS_TEAM_ID:-}" ]; then
+            echo "Missing secrets. Need APP_STORE_CONNECT_API_KEY, APP_STORE_CONNECT_KEY_ID, APP_STORE_CONNECT_ISSUER_ID, and IOS_TEAM_ID." >&2
+            exit 1
+          fi
+          mkdir -p "$RUNNER_TEMP/asc" "$HOME/.appstoreconnect/private_keys"
+          printf '%s\n' "$APP_STORE_CONNECT_API_KEY" > "$RUNNER_TEMP/asc/AuthKey.p8"
+          cp "$RUNNER_TEMP/asc/AuthKey.p8" "$HOME/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8"
+          chmod 600 "$RUNNER_TEMP/asc/AuthKey.p8" "$HOME/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8"
+
+      - name: Set build number from run id
+        run: |
+          set -euo pipefail
+          (cd "$GITHUB_WORKSPACE" && xcrun agvtool new-version -all "$GITHUB_RUN_NUMBER")
+
+      - name: Archive
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -project Ritu.xcodeproj \
+            -scheme Ritu \
+            -configuration Release \
+            -destination "generic/platform=iOS" \
+            -archivePath "$RUNNER_TEMP/Ritu.xcarchive" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$RUNNER_TEMP/asc/AuthKey.p8" \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
+            CODE_SIGN_STYLE=Automatic \
+            DEVELOPMENT_TEAM="$IOS_TEAM_ID" \
+            archive
+
+      - name: Export IPA
+        run: |
+          set -euo pipefail
+          python3 ci/write_export_options.py
+          xcodebuild -exportArchive \
+            -archivePath "$RUNNER_TEMP/Ritu.xcarchive" \
+            -exportPath "$RUNNER_TEMP/export" \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$RUNNER_TEMP/asc/AuthKey.p8" \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID"
+
+      - name: Upload to TestFlight
+        run: |
+          set -euo pipefail
+          ipa="$(ls "$RUNNER_TEMP"/export/*.ipa)"
+          xcrun altool --upload-app -f "$ipa" -t ios \
+            --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID"
