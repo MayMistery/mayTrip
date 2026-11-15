@@ -31,11 +31,11 @@ struct HandoffButtons: View {
                 Label(String(localized: "nav.amap"), systemImage: "location.north.line")
             }
         } label: {
-            Text(String(localized: "nav.directions"))
-                .font(.footnote.weight(.medium))
-                .padding(.horizontal, 10)
-                .padding(.vertical, 5)
-                .background(Color.primary.opacity(0.06), in: Capsule())
+            Image(systemName: "arrow.triangle.turn.up.right.circle")
+                .font(.body)
+                .foregroundStyle(.primary)
+                .frame(width: 32, height: 32)
+                .accessibilityLabel(String(localized: "nav.directions"))
         }
         .accessibilityLabel(String(localized: "nav.directions"))
     }

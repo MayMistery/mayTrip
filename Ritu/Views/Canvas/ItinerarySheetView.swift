@@ -1,4 +1,3 @@
-
 import SwiftUI
 
 struct ItinerarySheetView: View {
@@ -6,6 +5,7 @@ struct ItinerarySheetView: View {
     var plan: DayPlan
     @Binding var selectedOffset: Int
     var compact: Bool
+    var showsGrabber: Bool = true
     var selectedStopID: UUID?
     var onSelectStop: (DayStop) -> Void
     var onEditStop: (DayStop) -> Void
@@ -15,33 +15,35 @@ struct ItinerarySheetView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            grabber
+            if showsGrabber {
+                grabber
+            }
             DayRibbonView(trip: trip, selectedOffset: $selectedOffset)
-                .padding(.horizontal, 10)
-                .padding(.bottom, 4)
+                .padding(.horizontal, 16)
+                .padding(.bottom, 6)
             if compact {
                 NextStopBar(trip: trip, plan: plan)
                     .padding(.horizontal, 20)
-                    .padding(.bottom, 8)
+                    .padding(.bottom, 12)
             } else {
                 header
                     .padding(.horizontal, 20)
-                    .padding(.bottom, 8)
+                    .padding(.bottom, 6)
                 if plan.feelsFull {
                     Text(String(format: String(localized: "day.full %lld"), plan.orderedStops.count))
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                         .padding(.horizontal, 20)
-                        .padding(.bottom, 8)
+                        .padding(.bottom, 6)
                 }
                 if plan.orderedStops.isEmpty {
                     emptyDay
                 } else {
-                    list
+                    timeline
                 }
             }
         }
-        .frame(maxWidth: .infinity)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 
     private var grabber: some View {
@@ -49,7 +51,7 @@ struct ItinerarySheetView: View {
             .fill(Color.secondary.opacity(0.35))
             .frame(width: 36, height: 5)
             .padding(.top, 8)
-            .padding(.bottom, 10)
+            .padding(.bottom, 8)
             .frame(maxWidth: .infinity)
     }
 
@@ -62,9 +64,10 @@ struct ItinerarySheetView: View {
                     Text(cities)
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
+                        .lineLimit(1)
                 }
             }
-            Spacer()
+            Spacer(minLength: 8)
             Menu {
                 Button(String(localized: "day.gather"), systemImage: "point.3.connected.trianglepath.dotted") {
                     onGatherNearby()
@@ -73,11 +76,12 @@ struct ItinerarySheetView: View {
                     onAdd()
                 }
             } label: {
-                Image(systemName: "ellipsis.circle")
-                    .font(.title3)
-                    .foregroundStyle(.primary)
+                Image(systemName: "ellipsis")
+                    .font(.body.weight(.semibold))
+                    .frame(width: 32, height: 32)
                     .accessibilityLabel(String(localized: "day.actions"))
             }
+            .buttonStyle(.plain)
         }
     }
 
@@ -88,23 +92,23 @@ struct ItinerarySheetView: View {
     }
 
     private var emptyDay: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 14) {
             Text(String(localized: "day.empty.title"))
                 .font(.body)
                 .foregroundStyle(.secondary)
-            Button(String(localized: "action.add")) { onAdd() }
+            Button(String(localized: "action.add"), action: onAdd)
                 .buttonStyle(.bordered)
         }
         .padding(.horizontal, 20)
-        .padding(.top, 8)
+        .padding(.top, 12)
         .padding(.bottom, 24)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private var list: some View {
-        List {
-            ForEach(Array(plan.orderedStops.enumerated()), id: \.element.id) { index, stop in
-                VStack(alignment: .leading, spacing: 0) {
+    private var timeline: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 0) {
+                ForEach(Array(plan.orderedStops.enumerated()), id: \.element.id) { index, stop in
                     StopRowView(
                         number: index + 1,
                         stop: stop,
@@ -114,12 +118,13 @@ struct ItinerarySheetView: View {
                     )
                     .contentShape(Rectangle())
                     .onTapGesture { onSelectStop(stop) }
-                    .onLongPressGesture { onEditStop(stop) }
+                    .contextMenu { stopMenu(index: index, stop: stop) }
 
                     if index < plan.orderedStops.count - 1 {
                         InterStopRow(
                             from: stop,
                             to: plan.orderedStops[index + 1],
+                            color: DayPalette.color(forDayOffset: plan.dayOffset),
                             isCrowded: plan.feelsFull,
                             onModeChange: { mode in
                                 stop.modeToNext = mode
@@ -127,33 +132,53 @@ struct ItinerarySheetView: View {
                                 onRefreshTimes()
                             }
                         )
-                        .listRowInsets(EdgeInsets())
-                    }
-                }
-                .listRowSeparator(.hidden)
-                .listRowInsets(EdgeInsets(top: plan.feelsFull ? 4 : 8, leading: 16, bottom: plan.feelsFull ? 4 : 8, trailing: 16))
-                .listRowBackground(Color.clear)
-                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                    if stop.role == .sight {
-                        Button {
-                            if let context = plan.modelContext {
-                                DayAssembly.movePlaceToUnscheduled(stop, context: context)
-                                onRefreshTimes()
-                            }
-                        } label: {
-                            Label(String(localized: "place.moveUnscheduled"), systemImage: "tray.and.arrow.down")
-                        }
                     }
                 }
             }
-            .onMove { source, destination in
-                DayAssembly.moveStop(in: plan, from: source, to: destination)
-                onRefreshTimes()
+            .padding(.horizontal, 12)
+            .padding(.bottom, 28)
+        }
+        .scrollIndicators(.hidden)
+    }
+
+    @ViewBuilder
+    private func stopMenu(index: Int, stop: DayStop) -> some View {
+        if index > 0 {
+            Button {
+                move(index, by: -1)
+            } label: {
+                Label(String(localized: "stop.moveUp"), systemImage: "arrow.up")
             }
         }
-        .listStyle(.plain)
-        .scrollContentBackground(.hidden)
-        .environment(\.editMode, .constant(.active))
+        if index < plan.orderedStops.count - 1 {
+            Button {
+                move(index, by: 1)
+            } label: {
+                Label(String(localized: "stop.moveDown"), systemImage: "arrow.down")
+            }
+        }
+        Button {
+            onEditStop(stop)
+        } label: {
+            Label(String(localized: "action.edit"), systemImage: "pencil")
+        }
+        if stop.role == .sight {
+            Button(role: .destructive) {
+                if let context = plan.modelContext {
+                    DayAssembly.movePlaceToUnscheduled(stop, context: context)
+                    onRefreshTimes()
+                }
+            } label: {
+                Label(String(localized: "place.moveUnscheduled"), systemImage: "tray.and.arrow.down")
+            }
+        }
+    }
+
+    private func move(_ index: Int, by delta: Int) {
+        let target = delta > 0 ? index + 2 : index - 1
+        guard target >= 0, target <= plan.orderedStops.count else { return }
+        DayAssembly.moveStop(in: plan, from: IndexSet(integer: index), to: target)
+        onRefreshTimes()
     }
 }
 
@@ -166,10 +191,16 @@ struct StopRowView: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
-            Text("\(number)")
-                .font(.body.weight(.semibold).monospacedDigit())
-                .foregroundStyle(color)
-                .frame(width: 22, alignment: .trailing)
+            ZStack {
+                Circle()
+                    .fill(isSelected ? color : Color(.systemBackground))
+                Circle()
+                    .strokeBorder(color, lineWidth: isSelected ? 0 : 1.5)
+                Text("\(number)")
+                    .font(.caption.weight(.semibold).monospacedDigit())
+                    .foregroundStyle(isSelected ? Color.white : color)
+            }
+            .frame(width: 26, height: 26)
             VStack(alignment: .leading, spacing: 2) {
                 Text(stop.title)
                     .font(isCrowded ? .body.weight(.medium) : .body.weight(.semibold))
@@ -187,11 +218,11 @@ struct StopRowView: View {
                         if stop.place?.openState == .open {
                             Text(String(localized: "place.open"))
                                 .font(.footnote.weight(.medium))
-                                .foregroundStyle(Color(red: 0.22, green: 0.48, blue: 0.36))
+                                .foregroundStyle(Color(red: 0.18, green: 0.46, blue: 0.34))
                         } else if stop.place?.openState == .closed {
                             Text(String(localized: "place.closed"))
                                 .font(.footnote.weight(.medium))
-                                .foregroundStyle(Color(red: 0.72, green: 0.32, blue: 0.22))
+                                .foregroundStyle(Color(red: 0.70, green: 0.28, blue: 0.22))
                         }
                     }
                 }
@@ -203,9 +234,9 @@ struct StopRowView: View {
             }
             Spacer(minLength: 0)
         }
-        .padding(.vertical, isCrowded ? 2 : 4)
-        .padding(.horizontal, 4)
-        .background(isSelected ? color.opacity(0.10) : Color.clear, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .padding(.vertical, isCrowded ? 4 : 7)
+        .padding(.horizontal, 8)
+        .background(isSelected ? color.opacity(0.10) : Color.clear, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         .accessibilityElement(children: .combine)
     }
 
@@ -220,6 +251,7 @@ struct StopRowView: View {
 struct InterStopRow: View {
     var from: DayStop
     var to: DayStop
+    var color: Color
     var isCrowded: Bool
     var onModeChange: (TransportMode) -> Void
 
@@ -234,14 +266,15 @@ struct InterStopRow: View {
     var body: some View {
         HStack(spacing: 10) {
             Rectangle()
-                .fill(Color.primary.opacity(0.12))
-                .frame(width: 1)
-                .padding(.leading, 31)
-                .padding(.vertical, 2)
+                .fill(color.opacity(0.28))
+                .frame(width: 1.5, height: isCrowded ? 22 : 28)
+                .frame(width: 26)
+                .padding(.leading, 8)
             if isLockedTransfer {
                 Label(String(localized: mode.localizedName), systemImage: mode.symbolName)
                     .font(.footnote)
                     .foregroundStyle(.secondary)
+                    .labelStyle(.titleAndIcon)
             } else {
                 Menu {
                     ForEach(TransportMode.localModes) { item in
@@ -255,12 +288,13 @@ struct InterStopRow: View {
                     Label(String(localized: mode.localizedName), systemImage: mode.symbolName)
                         .font(.footnote.weight(.medium))
                         .foregroundStyle(.primary)
+                        .labelStyle(.titleAndIcon)
                 }
             }
             Text(durationText)
                 .font(RituTheme.compactTimeFont)
                 .foregroundStyle(.secondary)
-            Spacer()
+            Spacer(minLength: 0)
             if !isLockedTransfer, to.coordinateIsValid {
                 HandoffButtons(
                     origin: from.coordinateIsValid ? from.coordinate : nil,
@@ -270,7 +304,7 @@ struct InterStopRow: View {
                 )
             }
         }
-        .padding(.vertical, isCrowded ? 2 : 6)
+        .padding(.vertical, isCrowded ? 1 : 2)
         .padding(.trailing, 8)
     }
 
@@ -296,7 +330,7 @@ struct NextStopBar: View {
                     .font(.headline)
                     .lineLimit(1)
             }
-            Spacer()
+            Spacer(minLength: 8)
             if let duration = hopText {
                 Text(duration)
                     .font(RituTheme.nextStopTimeFont)

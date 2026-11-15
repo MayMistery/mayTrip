@@ -6,8 +6,9 @@
 
 ## 要求
 
-- macOS 与 Xcode 16 或更高版本（iOS 18 SDK）
-- 一部 iPhone，或 iPhone 模拟器
+- macOS，以及带 iOS 27.1 SDK 或更高版本的 Xcode（目前是 Xcode 27.1 / 27.2）。用更早的 SDK 编译时，应用会在 iPhone Duo 上被加上黑边。
+- 部署目标仍是 iOS 18。Duo 的折痕与同心圆角用可用性检查包起来，旧系统走原来的布局。
+- 一部 iPhone，或 iPhone 模拟器。Xcode 27.1 起可以选 iPhone Duo，打开、合上、半折都能看。
 
 本仓库是在 Linux 上整理的，无法在这里编译 iOS。请在 Mac 上打开并编译。
 
@@ -21,8 +22,7 @@
 也可以在终端里：
 
 ```bash
-cd Ritu
-xcodebuild -scheme Ritu -destination 'platform=iOS Simulator,name=iPhone 16' -configuration Debug
+xcodebuild -scheme Ritu -destination 'generic/platform=iOS Simulator' -configuration Debug
 ```
 
 ## 标识
@@ -40,7 +40,9 @@ xcodebuild -scheme Ritu -destination 'platform=iOS Simulator,name=iPhone 16' -co
 
 ## TestFlight
 
-上传需要一台 macOS 构建机（例如 GitHub Actions 的 macOS runner、Xcode Cloud，或其他云端 Mac），以及 App Store Connect API 密钥（`.p8`、Key ID、Issuer ID）。本工程还没有配置签名证书或 Team ID。等在 Xcode 里选定团队、Archive 成功后，再用 Fastlane 或 `xcodebuild` 上传到 TestFlight。
+推到 `main` 时，`.github/workflows/testflight.yml` 在 GitHub 的 `xcode-27` runner 上归档并上传。签名用 App Store Connect API 密钥，自动签名。`ci/select_xcode.py` 会选已安装的、带 iOS 27.1 或更高 SDK 的最新 Xcode，不会停在只有 iOS 27.0 SDK 的 Xcode 27.0 上。
+
+发往 `main` 的 pull request 走 `.github/workflows/pr.yml`：同一套 Xcode，只做未签名的模拟器编译，不需要密钥，也不上传。
 
 ## 地图与搜索
 

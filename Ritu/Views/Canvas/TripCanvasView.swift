@@ -1,12 +1,14 @@
-
 import SwiftUI
 import SwiftData
 import MapKit
 
 struct TripCanvasView: View {
     @Bindable var trip: Trip
+    var hidesSystemBackButton: Bool
+    var onShowAllTrips: () -> Void
+
     @Environment(\.modelContext) private var context
-    @Environment(\.dismiss) private var dismiss
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
     @State private var selectedOffset = 0
     @State private var showUnscheduled = false
@@ -25,45 +27,45 @@ struct TripCanvasView: View {
     @State private var editingStay: Stay?
     @State private var editingTransfer: Transfer?
     @State private var isRefreshing = false
+    @State private var didPrepare = false
+
     var body: some View {
-        ZStack(alignment: .top) {
-            TripMapView(
-                trip: trip,
-                selectedOffset: selectedOffset,
-                showUnscheduled: showUnscheduled,
-                selectedStopID: selectedStop?.id,
-                selectedPlaceID: selectedPlace?.id,
-                position: $position,
-                onSelectStop: { stop in
-                    selectedStop = stop
-                    selectedPlace = stop.place
-                    if sheetDetent == .compact {
-                        sheetDetent = .medium
-                    }
-                },
-                onSelectPlace: { place in
-                    selectedPlace = place
-                    selectedStop = nil
-                },
-                onLongPress: { coordinate in
-                    longPressCoordinate = coordinate
-                    showAddPlace = true
-                }
+        GeometryReader { proxy in
+            let fold = FoldGuide.current(in: proxy)
+            let layout = StageLayout.resolve(
+                size: proxy.size,
+                horizontalSizeClass: horizontalSizeClass,
+                fold: fold
             )
-            .ignoresSafeArea()
-
-            VStack(spacing: 10) {
-                topChrome
-                Spacer()
-            }
-            .padding(.top, 8)
-
-            ResizableBottomPanel(detent: $sheetDetent) { _ in
-                itinerarySheet
-            }
+            stage(layout, in: proxy)
+                .frame(width: proxy.size.width, height: proxy.size.height)
+                .navigationTitle(trip.name)
+                .navigationBarTitleDisplayMode(.inline)
+                .navigationBarBackButtonHidden(!layout.isPhone || hidesSystemBackButton)
+                .toolbar(layout.isPhone ? .visible : .hidden, for: .navigationBar)
+                .toolbar {
+                    if layout.isPhone && hidesSystemBackButton {
+                        ToolbarItem(placement: .topBarLeading) {
+                            backButton
+                        }
+                    }
+                    if layout.isPhone {
+                        ToolbarItem(placement: .topBarTrailing) {
+                            unscheduledButton(iconOnly: false)
+                        }
+                        ToolbarItem(placement: .topBarTrailing) {
+                            addMenu(iconOnly: false)
+                        }
+                        ToolbarItem(placement: .topBarTrailing) {
+                            Button {
+                                showTripEdit = true
+                            } label: {
+                                Label(String(localized: "trip.edit"), systemImage: "pencil")
+                            }
+                        }
+                    }
+                }
         }
-        .navigationBarBackButtonHidden(true)
-        .toolbar(.hidden, for: .navigationBar)
         .task { await setup() }
         .onChange(of: selectedOffset) { _, _ in
             selectedStop = nil
@@ -119,8 +121,8 @@ struct TripCanvasView: View {
                     .font(.footnote.weight(.medium))
                     .padding(.horizontal, 14)
                     .padding(.vertical, 8)
-                    .background(.ultraThinMaterial, in: Capsule())
-                    .padding(.top, 64)
+                    .rituGlass(cornerRadius: 18)
+                    .padding(.top, 8)
                     .transition(.move(edge: .top).combined(with: .opacity))
             }
         }
@@ -141,12 +143,78 @@ struct TripCanvasView: View {
         }
     }
 
-    private var topChrome: some View {
-        HStack(spacing: 10) {
-            chromeButton(systemName: "chevron.left", label: String(localized: "action.back")) {
-                dismiss()
+    @ViewBuilder
+    private func stage(_ layout: StageLayout, in proxy: GeometryProxy) -> some View {
+        switch layout {
+        case .phone:
+            phoneStage(in: proxy)
+        case .columns(let leading, let separator, let trailing):
+            HStack(spacing: 0) {
+                itineraryColumn
+                    .frame(width: leading)
+                foldGap(separator, hairline: true)
+                map
+                    .frame(width: trailing)
             }
-            VStack(spacing: 1) {
+            .background(Color(.systemBackground))
+        case .stacked(let top, let separator, let bottom):
+            VStack(spacing: 0) {
+                map
+                    .frame(height: top)
+                foldGap(separator, hairline: false)
+                itineraryColumn
+                    .frame(height: bottom)
+            }
+            .background(Color(.systemBackground))
+        }
+    }
+
+    /// A wide gap is the hinge: leave it empty. A one-point gap is just the seam between panes.
+    private func foldGap(_ length: CGFloat, hairline: Bool) -> some View {
+        Group {
+            if hairline && length <= 2 {
+                Rectangle().fill(Color.primary.opacity(0.10))
+            } else {
+                Color.clear
+            }
+        }
+        .frame(width: hairline ? length : nil, height: hairline ? nil : length)
+    }
+
+    private func phoneStage(in proxy: GeometryProxy) -> some View {
+        let panelHeight = PanelDetent.height(sheetDetent, in: proxy.size.height)
+        return map
+            .ignoresSafeArea()
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                Color.clear
+                    .frame(height: panelHeight)
+                    .accessibilityHidden(true)
+            }
+            .overlay(alignment: .bottom) {
+                ResizableBottomPanel(detent: $sheetDetent, containerHeight: proxy.size.height) {
+                    itinerary(showsGrabber: true)
+                }
+            }
+    }
+
+    private var itineraryColumn: some View {
+        VStack(spacing: 0) {
+            columnHeader
+            itinerary(showsGrabber: false)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .background(Color(.systemBackground))
+    }
+
+    private var columnHeader: some View {
+        HStack(spacing: 8) {
+            Button(action: onShowAllTrips) {
+                Image(systemName: "chevron.left")
+                    .font(.body.weight(.semibold))
+                    .frame(width: 32, height: 32)
+            }
+            .accessibilityLabel(String(localized: "trips.all"))
+            VStack(alignment: .leading, spacing: 1) {
                 Text(trip.name)
                     .font(.headline)
                     .lineLimit(1)
@@ -157,48 +225,101 @@ struct TripCanvasView: View {
                         .lineLimit(1)
                 }
             }
-            .frame(maxWidth: .infinity)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            unscheduledButton(iconOnly: true)
+            addMenu(iconOnly: true)
             Button {
-                showUnscheduled.toggle()
+                showTripEdit = true
             } label: {
+                Image(systemName: "pencil")
+                    .font(.body.weight(.semibold))
+                    .frame(width: 32, height: 32)
+            }
+            .accessibilityLabel(String(localized: "trip.edit"))
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, 12)
+        .padding(.top, 8)
+        .padding(.bottom, 4)
+    }
+
+    private var backButton: some View {
+        Button(action: onShowAllTrips) {
+            Label(String(localized: "trips.all"), systemImage: "chevron.left")
+        }
+    }
+
+    private func unscheduledButton(iconOnly: Bool) -> some View {
+        Button {
+            showUnscheduled.toggle()
+        } label: {
+            if iconOnly {
                 Image(systemName: showUnscheduled ? "circle.dashed.inset.filled" : "circle.dashed")
                     .font(.body.weight(.semibold))
-                    .frame(width: 36, height: 36)
-                    .background(.ultraThinMaterial, in: Circle())
+                    .frame(width: 32, height: 32)
+                    .accessibilityLabel(String(localized: "layer.unscheduled"))
+            } else {
+                Label(
+                    String(localized: "layer.unscheduled"),
+                    systemImage: showUnscheduled ? "circle.dashed.inset.filled" : "circle.dashed"
+                )
             }
-            .accessibilityLabel(String(localized: "layer.unscheduled"))
-            .accessibilityAddTraits(showUnscheduled ? .isSelected : [])
-            Menu {
-                Button(String(localized: "action.add"), systemImage: "plus") { showAddMenu = true }
-                Button(String(localized: "trip.edit"), systemImage: "pencil") { showTripEdit = true }
-            } label: {
+        }
+        .accessibilityAddTraits(showUnscheduled ? .isSelected : [])
+    }
+
+    private func addMenu(iconOnly: Bool) -> some View {
+        Menu {
+            Button(String(localized: "add.place"), systemImage: "mappin.and.ellipse") { showAddPlace = true }
+            Button(String(localized: "add.stay"), systemImage: "bed.double") { showAddStay = true }
+            Button(String(localized: "add.transfer"), systemImage: "airplane") { showAddTransfer = true }
+            Button(String(localized: "add.paste"), systemImage: "doc.on.clipboard") { showPaste = true }
+        } label: {
+            if iconOnly {
                 Image(systemName: "plus")
                     .font(.body.weight(.semibold))
-                    .frame(width: 36, height: 36)
-                    .background(.ultraThinMaterial, in: Circle())
+                    .frame(width: 32, height: 32)
                     .accessibilityLabel(String(localized: "action.add"))
+            } else {
+                Label(String(localized: "action.add"), systemImage: "plus")
             }
         }
-        .padding(.horizontal, 12)
     }
 
-    private func chromeButton(systemName: String, label: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: systemName)
-                .font(.body.weight(.semibold))
-                .frame(width: 36, height: 36)
-                .background(.ultraThinMaterial, in: Circle())
-        }
-        .accessibilityLabel(label)
+    private var map: some View {
+        TripMapView(
+            trip: trip,
+            selectedOffset: selectedOffset,
+            showUnscheduled: showUnscheduled,
+            selectedStopID: selectedStop?.id,
+            selectedPlaceID: selectedPlace?.id,
+            position: $position,
+            onSelectStop: { stop in
+                selectedStop = stop
+                selectedPlace = stop.place
+                if sheetDetent == .compact {
+                    sheetDetent = .medium
+                }
+            },
+            onSelectPlace: { place in
+                selectedPlace = place
+                selectedStop = nil
+            },
+            onLongPress: { coordinate in
+                longPressCoordinate = coordinate
+                showAddPlace = true
+            }
+        )
     }
 
-    private var itinerarySheet: some View {
+    private func itinerary(showsGrabber: Bool) -> some View {
         let plan = trip.dayPlan(forOffset: selectedOffset) ?? makePlan()
         return ItinerarySheetView(
             trip: trip,
             plan: plan,
             selectedOffset: $selectedOffset,
-            compact: sheetDetent == .compact,
+            compact: showsGrabber && sheetDetent == .compact,
+            showsGrabber: showsGrabber,
             selectedStopID: selectedStop?.id,
             onSelectStop: { stop in
                 selectedStop = stop
@@ -231,7 +352,6 @@ struct TripCanvasView: View {
             onAdd: { showAddMenu = true },
             onRefreshTimes: { Task { await refreshTimes() } }
         )
-        .background(.regularMaterial)
     }
 
     private func makePlan() -> DayPlan {
@@ -242,10 +362,13 @@ struct TripCanvasView: View {
     @MainActor
     private func setup() async {
         DayAssembly.ensureDayPlans(for: trip, in: context)
-        if let today = trip.dayOffset(for: Date()) {
-            selectedOffset = today
-        } else {
-            selectedOffset = 0
+        if !didPrepare {
+            didPrepare = true
+            if let today = trip.dayOffset(for: Date()) {
+                selectedOffset = today
+            } else {
+                selectedOffset = 0
+            }
         }
         await refreshTimes()
     }
@@ -262,4 +385,3 @@ struct TripCanvasView: View {
         }
     }
 }
-
