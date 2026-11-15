@@ -75,7 +75,7 @@ enum DayAssembly {
         }
 
         for leg in transfer.orderedLegs {
-            if let offset = trip.dayOffset(for: convertedDate(leg.departureAt, timeZone: trip.timeZone)) {
+            if let offset = trip.dayOffset(for: leg.departureAt) {
                 if let plan = trip.dayPlan(forOffset: offset) {
                     upsertAnchor(
                         key: anchorKey(leg: leg, suffix: "departure"),
@@ -91,7 +91,7 @@ enum DayAssembly {
                     )
                 }
             }
-            if let offset = trip.dayOffset(for: convertedDate(leg.arrivalAt, timeZone: trip.timeZone)) {
+            if let offset = trip.dayOffset(for: leg.arrivalAt) {
                 if let plan = trip.dayPlan(forOffset: offset) {
                     upsertAnchor(
                         key: anchorKey(leg: leg, suffix: "arrival"),
